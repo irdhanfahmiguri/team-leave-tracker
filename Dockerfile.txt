@@ -1,0 +1,18 @@
+# 1. Gunakan sistem Python resmi
+FROM python:3.10-slim
+
+# 2. Atur folder kerja di dalam server
+WORKDIR /app
+
+# 3. Salin dan install pustaka pendukung
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# 4. Salin seluruh kode aplikasi ke server
+COPY . .
+
+# 5. Buka jalur akses peramban
+EXPOSE 8501
+
+# 6. Jalankan aplikasi Streamlit
+CMD ["streamlit", "run", "app.py", "--server.port=8501", "--server.address=0.0.0.0"]
