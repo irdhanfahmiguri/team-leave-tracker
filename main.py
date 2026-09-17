@@ -68,6 +68,14 @@ def add_user(user: UserCreate):
     save_data(db)
     return {"message": "Pengguna berhasil ditambahkan", "user": new_user}
 
+# Endpoint Baru: Hapus Karyawan
+@app.delete("/api/users/{user_id}")
+def delete_user(user_id: int):
+    db = load_data()
+    db["users"] = [u for u in db["users"] if u["id"] != user_id]
+    save_data(db)
+    return {"message": "Pengguna berhasil dihapus"}
+
 @app.post("/api/leaves")
 def request_leave(leave: LeaveCreate):
     db = load_data()
@@ -187,11 +195,11 @@ def render_app():
                     </form>
                 </div>
 
-                <!-- Card 2: Input Data Karyawan -->
+                <!-- Card 2: Kelola Karyawan (Input & Hapus) -->
                 <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
                     <div class="flex items-center space-x-2 border-b border-slate-100 pb-3">
-                        <i data-lucide="user-plus" class="w-5 h-5 text-indigo-600"></i>
-                        <h2 class="font-bold text-slate-900 text-sm">Tambah Anggota Tim</h2>
+                        <i data-lucide="users" class="w-5 h-5 text-indigo-600"></i>
+                        <h2 class="font-bold text-slate-900 text-sm">Kelola Anggota Tim</h2>
                     </div>
 
                     <form onsubmit="handleAddUser(event)" class="space-y-3">
@@ -210,9 +218,15 @@ def render_app():
 
                         <button type="submit" class="w-full bg-slate-800 hover:bg-slate-900 text-white font-semibold text-xs py-2.5 rounded-xl transition flex items-center justify-center space-x-2">
                             <i data-lucide="plus-circle" class="w-4 h-4"></i>
-                            <span>Simpan Karyawan</span>
+                            <span>Tambah Karyawan</span>
                         </button>
                     </form>
+
+                    <!-- Daftar Karyawan Saat Ini & Tombol Hapus -->
+                    <div class="pt-2 border-t border-slate-100">
+                        <label class="block text-xs font-semibold text-slate-400 mb-2">Daftar Karyawan Terdaftar:</label>
+                        <div id="userListContainer" class="space-y-1.5 max-h-48 overflow-y-auto"></div>
+                    </div>
                 </div>
 
             </div>
@@ -220,7 +234,7 @@ def render_app():
             <!-- Right Panel: Approvals & Schedule View (8 cols) -->
             <div class="lg:col-span-8 space-y-6">
                 
-                <!-- Manager Approval Feed (Hidden if active user is Employee) -->
+                <!-- Manager Approval Feed -->
                 <div id="managerApprovalPanel" class="bg-amber-50/60 border border-amber-200 rounded-2xl p-6 shadow-sm space-y-4 hidden">
                     <div class="flex items-center justify-between border-b border-amber-200/60 pb-3">
                         <div class="flex items-center space-x-2">
@@ -280,6 +294,7 @@ def render_app():
                 const res = await fetch('/api/data');
                 appData = await res.json();
                 populateUserDropdowns();
+                renderUserList();
                 renderApp();
             }
 
@@ -298,6 +313,22 @@ def render_app():
                     appData.users.map(u => `<option value="${u.name}">Cuti: ${u.name}</option>`).join("");
             }
 
+            function renderUserList() {
+                const container = document.getElementById("userListContainer");
+                container.innerHTML = appData.users.map(u => `
+                    <div class="flex items-center justify-between p-2 rounded-lg bg-slate-50 border border-slate-100 text-xs">
+                        <div class="flex items-center space-x-2">
+                            <span class="font-semibold text-slate-700">${u.name}</span>
+                            <span class="text-[10px] text-slate-400 font-medium">(${u.level})</span>
+                        </div>
+                        <button onclick="handleDeleteUser(${u.id}, '${u.name}')" class="text-rose-500 hover:text-rose-700 p-1 rounded hover:bg-rose-50 transition" title="Hapus Karyawan">
+                            <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                        </button>
+                    </div>
+                `).join("");
+                lucide.createIcons();
+            }
+
             function switchUser() {
                 const selectedName = document.getElementById("activeUserSelect").value;
                 currentUser = appData.users.find(u => u.name === selectedName);
@@ -311,7 +342,6 @@ def render_app():
                 const managerPanel = document.getElementById("managerApprovalPanel");
                 managerPanel.classList.toggle("hidden", !isManager);
 
-                // Render Manager Approval Feed
                 if (isManager) {
                     const pending = appData.leaves.filter(l => l.status === "Pending");
                     document.getElementById("pendingBadgeCount").innerText = `${pending.length} Pengajuan`;
@@ -359,7 +389,6 @@ def render_app():
                     }
                 }
 
-                // Render Leave History Table
                 const filterVal = document.getElementById("filterUser").value;
                 const filteredLeaves = filterVal === "ALL" ? appData.leaves : appData.leaves.filter(l => l.user_name === filterVal);
                 const tbody = document.getElementById("leaveTableBody");
@@ -407,6 +436,13 @@ def render_app():
                 });
                 document.getElementById("newUserName").value = "";
                 fetchData();
+            }
+
+            async function handleDeleteUser(userId, userName) {
+                if (confirm(`Apakah Anda yakin ingin menghapus "${userName}" dari daftar karyawan?`)) {
+                    await fetch(`/api/users/${userId}`, { method: 'DELETE' });
+                    fetchData();
+                }
             }
 
             async function handleRequestLeave(e) {
