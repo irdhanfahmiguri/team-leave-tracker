@@ -1,5 +1,5 @@
-from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi import FastAPI, HTTPException, Body
+from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 import json
@@ -30,8 +30,11 @@ def load_data():
         }
         save_data(initial_data)
         return initial_data
-    with open(DATA_FILE, "r") as f:
-        return json.load(f)
+    try:
+        with open(DATA_FILE, "r") as f:
+            return json.load(f)
+    except Exception:
+        return {"users": [], "leaves": []}
 
 def save_data(data):
     with open(DATA_FILE, "w") as f:
@@ -59,6 +62,14 @@ def health_check():
 @app.get("/api/data")
 def get_all_data():
     return load_data()
+
+# Endpoint Import / Restore Data Manual
+@app.post("/api/data/restore")
+def restore_data(data: dict = Body(...)):
+    if "users" in data and "leaves" in data:
+        save_data(data)
+        return {"message": "Data berhasil dipulihkan"}
+    raise HTTPException(status_code=400, detail="Format JSON tidak valid")
 
 @app.post("/api/users")
 def add_user(user: UserCreate):
@@ -135,14 +146,24 @@ def render_app():
                     </div>
                 </div>
 
-                <!-- Active Role Selector -->
-                <div class="flex items-center space-x-3 bg-slate-100 p-1.5 rounded-xl border border-slate-200">
-                    <div class="flex items-center space-x-2 px-2 text-slate-500">
-                        <i data-lucide="user-check" class="w-4 h-4 text-indigo-600"></i>
-                        <span class="text-xs font-semibold">Pengguna:</span>
+                <!-- Active Role Selector & Backup Buttons -->
+                <div class="flex items-center space-x-2">
+                    <button onclick="downloadBackup()" title="Download Backup Data" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold flex items-center space-x-1.5 transition">
+                        <i data-lucide="download" class="w-3.5 h-3.5"></i>
+                        <span class="hidden sm:inline">Backup Data</span>
+                    </button>
+                    
+                    <label title="Restore Backup Data" class="bg-slate-100 hover:bg-slate-200 text-slate-700 px-3 py-1.5 rounded-xl border border-slate-200 text-xs font-semibold flex items-center space-x-1.5 cursor-pointer transition">
+                        <i data-lucide="upload" class="w-3.5 h-3.5"></i>
+                        <span class="hidden sm:inline">Restore Data</span>
+                        <input type="file" id="restoreFileInput" accept=".json" onchange="uploadBackup(event)" class="hidden">
+                    </label>
+
+                    <div class="flex items-center space-x-2 bg-slate-100 p-1.5 rounded-xl border border-slate-200 ml-2">
+                        <i data-lucide="user-check" class="w-4 h-4 text-indigo-600 ml-1"></i>
+                        <select id="activeUserSelect" onchange="switchUser()" class="bg-white text-slate-800 text-xs font-semibold rounded-lg px-2.5 py-1 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
+                        </select>
                     </div>
-                    <select id="activeUserSelect" onchange="switchUser()" class="bg-white text-slate-800 text-xs font-semibold rounded-lg px-3 py-1.5 border border-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 shadow-sm">
-                    </select>
                 </div>
             </div>
         </header>
@@ -150,9 +171,8 @@ def render_app():
         <!-- Main Workspace -->
         <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            <!-- Left Panel: Forms & Actions -->
+            <!-- Left Panel -->
             <div class="lg:col-span-4 space-y-6">
-                
                 <!-- Card 1: Form Pengajuan Cuti -->
                 <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
                     <div class="flex items-center space-x-2 border-b border-slate-100 pb-3">
@@ -226,12 +246,10 @@ def render_app():
                         <div id="userListContainer" class="space-y-1.5 max-h-48 overflow-y-auto"></div>
                     </div>
                 </div>
-
             </div>
 
-            <!-- Right Panel: Approvals & Schedule View -->
+            <!-- Right Panel -->
             <div class="lg:col-span-8 space-y-6">
-                
                 <!-- Manager Approval Feed -->
                 <div id="managerApprovalPanel" class="bg-amber-50/60 border border-amber-200 rounded-2xl p-6 shadow-sm space-y-4 hidden">
                     <div class="flex items-center justify-between border-b border-amber-200/60 pb-3">
@@ -255,7 +273,6 @@ def render_app():
                             <h2 id="tableTitle" class="font-bold text-slate-900 text-sm">Jadwal & Status Cuti Tim</h2>
                         </div>
 
-                        <!-- Filter Employee (Hanya Tampil untuk Manager) -->
                         <div id="filterContainer" class="flex items-center space-x-2">
                             <span class="text-xs font-semibold text-slate-400">Filter:</span>
                             <select id="filterUser" onchange="renderApp()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
@@ -264,7 +281,6 @@ def render_app():
                         </div>
                     </div>
 
-                    <!-- Table -->
                     <div class="overflow-x-auto">
                         <table class="w-full text-left text-xs text-slate-600">
                             <thead class="bg-slate-50 text-[11px] font-bold uppercase tracking-wider text-slate-400 rounded-xl">
@@ -280,7 +296,6 @@ def render_app():
                         </table>
                     </div>
                 </div>
-
             </div>
         </main>
 
@@ -294,6 +309,38 @@ def render_app():
                 populateUserDropdowns();
                 renderUserList();
                 renderApp();
+            }
+
+            function downloadBackup() {
+                const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(appData, null, 4));
+                const downloadAnchor = document.createElement('a');
+                downloadAnchor.setAttribute("href", dataStr);
+                downloadAnchor.setAttribute("download", `leave_tracker_backup_${new Date().toISOString().slice(0,10)}.json`);
+                document.body.appendChild(downloadAnchor);
+                downloadAnchor.click();
+                downloadAnchor.remove();
+            }
+
+            async function uploadBackup(event) {
+                const file = event.target.files[0];
+                if (!file) return;
+
+                const reader = new FileReader();
+                reader.onload = async function(e) {
+                    try {
+                        const parsedData = JSON.parse(e.target.result);
+                        await fetch('/api/data/restore', {
+                            method: 'POST',
+                            headers: {'Content-Type': 'application/json'},
+                            body: JSON.stringify(parsedData)
+                        });
+                        alert('Data berhasil dipulihkan!');
+                        fetchData();
+                    } catch (err) {
+                        alert('File backup JSON tidak valid.');
+                    }
+                };
+                reader.readAsText(file);
             }
 
             function populateUserDropdowns() {
@@ -338,14 +385,10 @@ def render_app():
 
                 const isManager = currentUser.level === "Manager";
 
-                // Toggle Manager Panel & Filter Dropdown
                 document.getElementById("managerApprovalPanel").classList.toggle("hidden", !isManager);
                 document.getElementById("filterContainer").classList.toggle("hidden", !isManager);
-                
-                // Ubah Judul Tabel Sesuai Role
                 document.getElementById("tableTitle").innerText = isManager ? "Jadwal & Status Cuti Tim" : "Riwayat Pengajuan Cuti Saya";
 
-                // Render Approval Feed jika Manager
                 if (isManager) {
                     const pending = appData.leaves.filter(l => l.status === "Pending");
                     document.getElementById("pendingBadgeCount").innerText = `${pending.length} Pengajuan`;
@@ -393,7 +436,6 @@ def render_app():
                     }
                 }
 
-                // Filter Data berdasarkan Role (Manager = Semua/Filter, Employee = Hanya Milik Sendiri)
                 let filteredLeaves = [];
                 if (isManager) {
                     const filterVal = document.getElementById("filterUser").value;
