@@ -1,0 +1,3 @@
+version: "1"
+name: team-leave-tracker
+description: A simple team leave tracker app for managing leave requests, approvals, and preventing daily overlap schedule conflicts.
