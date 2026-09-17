@@ -68,7 +68,6 @@ def add_user(user: UserCreate):
     save_data(db)
     return {"message": "Pengguna berhasil ditambahkan", "user": new_user}
 
-# Endpoint Baru: Hapus Karyawan
 @app.delete("/api/users/{user_id}")
 def delete_user(user_id: int):
     db = load_data()
@@ -151,7 +150,7 @@ def render_app():
         <!-- Main Workspace -->
         <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 flex-1 w-full grid grid-cols-1 lg:grid-cols-12 gap-8">
             
-            <!-- Left Panel: Forms & Actions (4 cols) -->
+            <!-- Left Panel: Forms & Actions -->
             <div class="lg:col-span-4 space-y-6">
                 
                 <!-- Card 1: Form Pengajuan Cuti -->
@@ -195,7 +194,7 @@ def render_app():
                     </form>
                 </div>
 
-                <!-- Card 2: Kelola Karyawan (Input & Hapus) -->
+                <!-- Card 2: Kelola Karyawan -->
                 <div class="bg-white rounded-2xl p-6 border border-slate-200 shadow-sm space-y-4">
                     <div class="flex items-center space-x-2 border-b border-slate-100 pb-3">
                         <i data-lucide="users" class="w-5 h-5 text-indigo-600"></i>
@@ -222,7 +221,6 @@ def render_app():
                         </button>
                     </form>
 
-                    <!-- Daftar Karyawan Saat Ini & Tombol Hapus -->
                     <div class="pt-2 border-t border-slate-100">
                         <label class="block text-xs font-semibold text-slate-400 mb-2">Daftar Karyawan Terdaftar:</label>
                         <div id="userListContainer" class="space-y-1.5 max-h-48 overflow-y-auto"></div>
@@ -231,7 +229,7 @@ def render_app():
 
             </div>
 
-            <!-- Right Panel: Approvals & Schedule View (8 cols) -->
+            <!-- Right Panel: Approvals & Schedule View -->
             <div class="lg:col-span-8 space-y-6">
                 
                 <!-- Manager Approval Feed -->
@@ -254,11 +252,11 @@ def render_app():
                     <div class="flex flex-col sm:flex-row sm:items-center justify-between border-b border-slate-100 pb-4 gap-3">
                         <div class="flex items-center space-x-2">
                             <i data-lucide="calendar" class="w-5 h-5 text-indigo-600"></i>
-                            <h2 class="font-bold text-slate-900 text-sm">Jadwal & Status Cuti Tim</h2>
+                            <h2 id="tableTitle" class="font-bold text-slate-900 text-sm">Jadwal & Status Cuti Tim</h2>
                         </div>
 
-                        <!-- Filter Employee -->
-                        <div class="flex items-center space-x-2">
+                        <!-- Filter Employee (Hanya Tampil untuk Manager) -->
+                        <div id="filterContainer" class="flex items-center space-x-2">
                             <span class="text-xs font-semibold text-slate-400">Filter:</span>
                             <select id="filterUser" onchange="renderApp()" class="bg-slate-50 border border-slate-200 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-700 focus:outline-none focus:ring-2 focus:ring-indigo-500">
                                 <option value="ALL">Semua Anggota Tim</option>
@@ -339,9 +337,15 @@ def render_app():
                 if (!currentUser) return;
 
                 const isManager = currentUser.level === "Manager";
-                const managerPanel = document.getElementById("managerApprovalPanel");
-                managerPanel.classList.toggle("hidden", !isManager);
 
+                // Toggle Manager Panel & Filter Dropdown
+                document.getElementById("managerApprovalPanel").classList.toggle("hidden", !isManager);
+                document.getElementById("filterContainer").classList.toggle("hidden", !isManager);
+                
+                // Ubah Judul Tabel Sesuai Role
+                document.getElementById("tableTitle").innerText = isManager ? "Jadwal & Status Cuti Tim" : "Riwayat Pengajuan Cuti Saya";
+
+                // Render Approval Feed jika Manager
                 if (isManager) {
                     const pending = appData.leaves.filter(l => l.status === "Pending");
                     document.getElementById("pendingBadgeCount").innerText = `${pending.length} Pengajuan`;
@@ -389,8 +393,15 @@ def render_app():
                     }
                 }
 
-                const filterVal = document.getElementById("filterUser").value;
-                const filteredLeaves = filterVal === "ALL" ? appData.leaves : appData.leaves.filter(l => l.user_name === filterVal);
+                // Filter Data berdasarkan Role (Manager = Semua/Filter, Employee = Hanya Milik Sendiri)
+                let filteredLeaves = [];
+                if (isManager) {
+                    const filterVal = document.getElementById("filterUser").value;
+                    filteredLeaves = filterVal === "ALL" ? appData.leaves : appData.leaves.filter(l => l.user_name === filterVal);
+                } else {
+                    filteredLeaves = appData.leaves.filter(l => l.user_name === currentUser.name);
+                }
+
                 const tbody = document.getElementById("leaveTableBody");
 
                 if (filteredLeaves.length === 0) {
